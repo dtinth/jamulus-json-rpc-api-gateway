@@ -11,8 +11,14 @@ const env = Env(
     JAMULUS_SECRET: z.string(),
     JAMULUS_HOST: z.string().default("127.0.0.1"),
     JAMULUS_PORT: z.coerce.number().default(22222),
+    API_KEYS: z
+      .string()
+      .min(1)
+      .transform((value) => value.split(",")),
   })
 );
+
+env.validate();
 
 const fastify = Fastify({ logger: true });
 
@@ -67,8 +73,18 @@ fastify.get("/", async () => ({
   message: "This is jamulus-json-rpc-api-gateway",
 }));
 
-fastify.get("/whee", async () =>
-  jamulusClient.request("jamulusserver/getClients", {})
-);
+fastify.post("/rpc/*", async (request) => {
+  const apiKey = request.headers["x-api-key"];
+  if (!apiKey) {
+    throw new Error("Missing X-API-Key header");
+  }
+  if (!env.API_KEYS.includes(apiKey)) {
+    throw new Error("Invalid X-API-Key header");
+  }
+  return jamulusClient.request(
+    String(request.params["*"]),
+    request.body?.params || {}
+  );
+});
 
 fastify.listen({ port: env.PORT });

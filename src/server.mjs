@@ -8,6 +8,7 @@ import { z } from "zod";
 const env = Env(
   z.object({
     PORT: z.coerce.number().default(3434),
+    LISTEN_HOST: z.string().default("0.0.0.0"),
     JAMULUS_SECRET: z.string(),
     JAMULUS_HOST: z.string().default("127.0.0.1"),
     JAMULUS_PORT: z.coerce.number().default(22222),
@@ -87,4 +88,4 @@ fastify.post("/rpc/*", async (request) => {
   );
 });
 
-fastify.listen({ port: env.PORT });
+fastify.listen({ port: env.PORT, host: env.LISTEN_HOST });

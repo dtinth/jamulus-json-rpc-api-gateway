@@ -31,3 +31,9 @@ services:
     env_file:
       - .env
 ```
+
+After the service is up, you can run any [Jamulus JSON-RPC method](https://github.com/jamulussoftware/jamulus/blob/main/docs/JSON-RPC.md) by making an HTTP request to the gateway:
+
+```sh
+curl -X POST http://localhost:$PORT/rpc/jamulus/getMode -H "x-api-key: $API_KEY"
+```

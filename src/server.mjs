@@ -1,8 +1,10 @@
-import Fastify from "fastify";
-import net from "net";
-import ndjson from "ndjson";
-import { randomUUID } from "crypto";
 import { Env } from "@(-.-)/env";
+import { randomUUID } from "crypto";
+import Fastify from "fastify";
+import fs from "fs";
+import ndjson from "ndjson";
+import net from "net";
+import path from "path";
 import { z } from "zod";
 
 const env = Env(
@@ -20,6 +22,19 @@ const env = Env(
 );
 
 env.validate();
+
+// Get the Jamulus secret, potentially reading from a file
+let jamulusSecret = env.JAMULUS_SECRET;
+// Check if JAMULUS_SECRET is an absolute path and read it if it exists
+if (path.isAbsolute(env.JAMULUS_SECRET) && fs.existsSync(env.JAMULUS_SECRET)) {
+  try {
+    jamulusSecret = fs.readFileSync(env.JAMULUS_SECRET, "utf8").trim();
+    console.log(`Read Jamulus secret from file: ${env.JAMULUS_SECRET}`);
+  } catch (error) {
+    console.error(`Error reading JAMULUS_SECRET from file: ${error.message}`);
+    process.exit(1);
+  }
+}
 
 const fastify = Fastify({ logger: true });
 
@@ -55,7 +70,7 @@ function createJamulusClient() {
           return await promise;
         };
         const authResult = await makeRequest("jamulus/apiAuth", {
-          secret: env.JAMULUS_SECRET,
+          secret: jamulusSecret,
         });
         if (authResult.error) {
           throw new Error(

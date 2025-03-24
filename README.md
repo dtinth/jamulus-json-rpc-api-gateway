@@ -8,7 +8,7 @@ Sample `.env` file:
 
 ```sh
 # The Jamulus JSON API connection details
-JAMULUS_SECRET=
+JAMULUS_SECRET=  # Can be the secret string or an absolute path to a file containing the secret
 JAMULUS_HOST=
 JAMULUS_PORT=
 

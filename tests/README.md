@@ -16,6 +16,7 @@ This directory contains comprehensive black-box acceptance tests for the jamulus
   - Error handling (missing/invalid API keys)
   - Request forwarding and response handling
   - Multiple sequential requests
+  - **Uses Node.js built-in test runner** (`node:test` module)
 
 - **`docker-compose.test.yml`** - Docker Compose configuration for testing
   - Sets up mock Jamulus server
@@ -66,6 +67,13 @@ docker compose -f docker-compose.test.yml down -v
 ```
 
 ### Option 3: Manual Testing
+
+You can run tests directly with Node.js built-in test runner:
+
+```bash
+# Start the mock server and gateway first, then:
+node --test tests/acceptance.test.mjs
+```
 
 Test the mock server independently:
 

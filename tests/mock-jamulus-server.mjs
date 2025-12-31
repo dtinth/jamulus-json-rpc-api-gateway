@@ -12,6 +12,7 @@
 
 import net from 'net';
 import { createInterface } from 'readline';
+import { fileURLToPath } from 'url';
 
 const PORT = process.env.JAMULUS_PORT || 22222;
 const HOST = process.env.JAMULUS_HOST || '0.0.0.0';
@@ -177,7 +178,7 @@ class MockJamulusServer {
 }
 
 // Start server if run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
   const server = new MockJamulusServer(PORT, HOST, SECRET);
   
   server.start().catch((err) => {

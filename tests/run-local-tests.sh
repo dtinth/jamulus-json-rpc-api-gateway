@@ -64,8 +64,8 @@ echo ""
 echo "Running acceptance tests..."
 echo ""
 
-# Run tests
-GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}" API_KEY="${API_KEY}" node tests/acceptance.test.mjs
+# Run tests with Node.js built-in test runner
+GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}" API_KEY="${API_KEY}" node --test tests/acceptance.test.mjs
 TEST_RESULT=$?
 
 if [ $TEST_RESULT -eq 0 ]; then

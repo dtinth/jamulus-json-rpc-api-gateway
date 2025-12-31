@@ -43,6 +43,9 @@ Required environment variables:
 # Run acceptance tests locally
 bash tests/run-local-tests.sh
 
+# Or run directly with Node.js built-in test runner
+node --test tests/acceptance.test.mjs
+
 # Run with Docker Compose
 docker build -t jamulus-json-rpc-api-gateway:test .
 cd tests && docker compose -f docker-compose.test.yml up --exit-code-from test-runner
@@ -68,7 +71,8 @@ cd tests && docker compose -f docker-compose.test.yml up --exit-code-from test-r
 - **`tests/acceptance.test.mjs`** - Test suite
   - Tests HTTP API without modifying application code
   - Validates authentication, error handling, and request forwarding
-  - Uses simple HTTP client (no external dependencies)
+  - **Uses Node.js built-in test runner** (`node:test`, available since v18)
+  - Simple HTTP client implementation (no external dependencies)
   
 - **`tests/docker-compose.test.yml`** - Container orchestration for testing
   - Defines mock-jamulus, gateway, and test-runner services
@@ -88,7 +92,7 @@ The Jamulus JSON-RPC API uses:
 
 Example authentication flow:
 ```json
-{"id":1,"jsonrpc":"2.0","method":"jamulus/apiAuth","params":{"secret":"..."}}`
+{"id":1,"jsonrpc":"2.0","method":"jamulus/apiAuth","params":{"secret":"..."}}
 {"id":1,"jsonrpc":"2.0","result":"ok"}
 ```
 

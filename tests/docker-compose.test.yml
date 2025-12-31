@@ -47,7 +47,7 @@ services:
   test-runner:
     image: node:20.10.0-alpine
     working_dir: /app
-    command: node tests/acceptance.test.mjs
+    command: node --test tests/acceptance.test.mjs
     volumes:
       - ./tests:/app/tests
     environment:

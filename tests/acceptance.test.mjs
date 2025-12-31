@@ -11,45 +11,32 @@
 
 import { describe, it, before } from 'node:test';
 import { strict as assert } from 'node:assert';
-import http from 'node:http';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3434';
 const API_KEY = process.env.API_KEY || 'test-api-key-123';
 const INVALID_API_KEY = 'invalid-api-key-xyz';
 
 // Helper function to make HTTP requests
-function httpRequest(url, options = {}) {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const reqOptions = {
-      hostname: urlObj.hostname,
-      port: urlObj.port,
-      path: urlObj.pathname,
-      method: options.method || 'GET',
-      headers: options.headers || {}
-    };
-
-    const req = http.request(reqOptions, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const body = data ? JSON.parse(data) : null;
-          resolve({ status: res.statusCode, headers: res.headers, body });
-        } catch (err) {
-          resolve({ status: res.statusCode, headers: res.headers, body: data });
-        }
-      });
-    });
-
-    req.on('error', reject);
-
-    if (options.body) {
-      req.write(JSON.stringify(options.body));
-    }
-
-    req.end();
+async function httpRequest(url, options = {}) {
+  const response = await fetch(url, {
+    method: options.method || 'GET',
+    headers: options.headers || {},
+    body: options.body ? JSON.stringify(options.body) : undefined,
   });
+
+  let body;
+  const text = await response.text();
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch (err) {
+    body = text;
+  }
+
+  return {
+    status: response.status,
+    headers: response.headers,
+    body
+  };
 }
 
 // Wait for service to be ready

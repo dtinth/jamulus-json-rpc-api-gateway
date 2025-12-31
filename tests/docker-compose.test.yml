@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   # Mock Jamulus JSON-RPC Server
   mock-jamulus:
     image: node:20.10.0-alpine
     working_dir: /app
-    command: node tests/mock-jamulus-server.mjs
+    command: node mock-jamulus-server.mjs
     volumes:
-      - ./tests:/app/tests
+      - .:/app
     environment:
       JAMULUS_HOST: 0.0.0.0
       JAMULUS_PORT: 22222
@@ -45,9 +43,9 @@ services:
   test-runner:
     image: node:20.10.0-alpine
     working_dir: /app
-    command: node --test tests/acceptance.test.mjs
+    command: node --test acceptance.test.mjs
     volumes:
-      - ./tests:/app/tests
+      - .:/app
     environment:
       GATEWAY_URL: http://gateway:3434
       API_KEY: test-api-key-123

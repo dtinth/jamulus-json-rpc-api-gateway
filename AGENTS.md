@@ -139,6 +139,20 @@ The acceptance tests follow a black-box approach:
 4. Verify proper protocol implementation (authentication, NDJSON, JSON-RPC)
 5. Test multiple requests to ensure connection handling works correctly
 
+## Docker Compose Testing
+
+When running tests with Docker Compose from the `tests/` directory:
+- **Volume mounts**: Use `.:/app` to mount the current directory (tests/) as /app
+- **Commands**: Reference files directly without subdirectory paths (e.g., `node mock-jamulus-server.mjs` not `node tests/mock-jamulus-server.mjs`)
+- **Version field**: The `version` field in docker-compose.yml is obsolete in modern Docker Compose and should be omitted
+- **Pre-built images**: Use pre-built images (e.g., `jamulus-json-rpc-api-gateway:test`) instead of building in docker-compose to avoid context path issues
+
+## HTTP Client Implementation
+
+- **Use fetch**: Node.js 18+ has built-in `fetch` support - use it instead of custom HTTP client implementations
+- **Simplicity**: fetch is simpler and more familiar than low-level http.request()
+- **Async/await**: fetch naturally works with async/await, making test code cleaner
+
 ## Future Considerations
 
 - Consider adding integration tests with a real Jamulus server

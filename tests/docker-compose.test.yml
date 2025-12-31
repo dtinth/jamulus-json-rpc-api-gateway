@@ -22,9 +22,7 @@ services:
 
   # API Gateway (the application being tested)
   gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: jamulus-json-rpc-api-gateway:test
     environment:
       PORT: 3434
       LISTEN_HOST: 0.0.0.0

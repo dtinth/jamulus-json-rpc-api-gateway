@@ -144,7 +144,7 @@ class MockJamulusServer {
     }
 
     // Handle other methods
-    if (MOCK_RESPONSES[method]) {
+    if (Object.prototype.hasOwnProperty.call(MOCK_RESPONSES, method)) {
       return {
         jsonrpc: '2.0',
         id,

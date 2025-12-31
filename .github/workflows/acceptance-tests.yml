@@ -1,0 +1,54 @@
+name: Acceptance Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  acceptance-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t jamulus-json-rpc-api-gateway:test .
+
+      - name: Start services with Docker Compose
+        run: |
+          cd tests
+          docker compose -f docker-compose.test.yml up -d mock-jamulus gateway
+          
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to be healthy..."
+          timeout 60 bash -c 'until docker compose -f tests/docker-compose.test.yml ps | grep -q "healthy"; do sleep 2; done'
+          docker compose -f tests/docker-compose.test.yml ps
+
+      - name: Run acceptance tests
+        run: |
+          docker compose -f tests/docker-compose.test.yml up --exit-code-from test-runner test-runner
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Mock Jamulus Server Logs ==="
+          docker compose -f tests/docker-compose.test.yml logs mock-jamulus
+          echo ""
+          echo "=== Gateway Logs ==="
+          docker compose -f tests/docker-compose.test.yml logs gateway
+          echo ""
+          echo "=== Test Runner Logs ==="
+          docker compose -f tests/docker-compose.test.yml logs test-runner
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f tests/docker-compose.test.yml down -v

@@ -4,8 +4,9 @@ import Fastify from "fastify";
 import fs from "fs";
 import ndjson from "ndjson";
 import net from "net";
-import path from "path";
 import { z } from "zod";
+import { createJwtVerifier } from "./jwt-verifier.mjs";
+import path from "path";
 
 const env = Env(
   z.object({
@@ -18,6 +19,7 @@ const env = Env(
       .string()
       .min(1)
       .transform((value) => value.split(",")),
+    JWT_PUBLIC_KEY: z.string().optional(),
   })
 );
 
@@ -37,6 +39,18 @@ if (path.isAbsolute(env.JAMULUS_SECRET) && fs.existsSync(env.JAMULUS_SECRET)) {
 }
 
 const fastify = Fastify({ logger: true });
+
+let jwtVerifier = null;
+if (env.JWT_PUBLIC_KEY) {
+  try {
+    jwtVerifier = await createJwtVerifier(env.JWT_PUBLIC_KEY);
+  } catch (error) {
+    console.error(
+      `Error initializing JWT verifier (expecting a base64-encoded PEM public key or an absolute path to a PEM file): ${error.message}`
+    );
+    process.exit(1);
+  }
+}
 
 const jamulusClient = createJamulusClient();
 
@@ -97,10 +111,11 @@ fastify.post("/rpc/*", async (request) => {
   if (!env.API_KEYS.includes(apiKey)) {
     throw new Error("Invalid X-API-Key header");
   }
-  return jamulusClient.request(
-    String(request.params["*"]),
-    request.body?.params || {}
-  );
+  const method = String(request.params["*"]);
+  const params = jwtVerifier
+    ? (await jwtVerifier.verifyJwt(request.body?.jwt, method)).params
+    : request.body?.params || {};
+  return jamulusClient.request(method, params);
 });
 
 fastify.listen({ port: env.PORT, host: env.LISTEN_HOST });

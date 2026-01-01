@@ -20,6 +20,8 @@ services:
 
   # API Gateway (the application being tested)
   gateway:
+    build:
+      context: ..
     image: jamulus-json-rpc-api-gateway:test
     environment:
       PORT: 3434
@@ -28,6 +30,7 @@ services:
       JAMULUS_HOST: mock-jamulus
       JAMULUS_PORT: 22222
       API_KEYS: test-api-key-123,another-api-key-456
+      JWT_PUBLIC_KEY: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQTZFdmh1cnlkYmlSOWZGQThWVEM0RFBGYjMzZk13aWV5dnphZTZyTjNxajQ9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=
     networks:
       - test-network
     depends_on:
@@ -42,13 +45,14 @@ services:
   # Test Runner
   test-runner:
     image: node:20.10.0-alpine
-    working_dir: /app
-    command: node --test acceptance.test.mjs
+    working_dir: /workspace/tests
+    command: sh -c "corepack enable && cd /workspace && pnpm install && cd /workspace/tests && node --test acceptance.test.mjs"
     volumes:
-      - .:/app
+      - ..:/workspace
     environment:
       GATEWAY_URL: http://gateway:3434
       API_KEY: test-api-key-123
+      JWT_PRIVATE_KEY_BASE64: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUM4MFNBZ05TSlF2MTM2a2tpSjZEL3R0N0ZoZ2RFRndnRHZNcElONWgwT0gKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=
     networks:
       - test-network
     depends_on:

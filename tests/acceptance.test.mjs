@@ -55,13 +55,13 @@ function createJwt(method, params = {}, overrides = {}) {
 function buildRpcRequest(method, params = {}, options = {}) {
   const useJsonBody = options.forceJsonBody || !jwtEnabled;
   const headers = {
-    ...(useJsonBody ? { 'Content-Type': 'application/json' } : { 'Content-Type': 'application/jwt' }),
+    'Content-Type': 'application/json',
     ...(options.apiKey !== undefined ? { 'X-API-Key': options.apiKey } : options.skipApiKey ? {} : { 'X-API-Key': API_KEY }),
     ...(options.headers || {}),
   };
   const body = useJsonBody
     ? { params }
-    : createJwt(method, params, options.jwtOverrides || {});
+    : { jwt: createJwt(method, params, options.jwtOverrides || {}) };
   return { headers, body };
 }
 
@@ -197,7 +197,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
 
       assert.equal(response.status, 500);
       assert.ok(response.body);
-      assert.ok(response.body.message.includes('Expected JWT body'));
+      assert.ok(response.body.message.includes('Expected jwt'));
     });
 
     it('rejects replayed JWT tokens', async () => {
@@ -212,6 +212,17 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
       assert.equal(second.status, 500);
       assert.ok(second.body);
       assert.ok(second.body.message.includes('already been used'));
+    });
+
+    it('rejects JWT exp too far in future', async () => {
+      const response = await callRpc('jamulus/getMode', {}, {
+        jwtOverrides: {
+          exp: Math.floor(Date.now() / 1000) + 600,
+        }
+      });
+      assert.equal(response.status, 500);
+      assert.ok(response.body);
+      assert.ok(response.body.message.includes('exp too far'));
     });
   }
 });

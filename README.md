@@ -15,8 +15,12 @@ JAMULUS_PORT=
 # Comma-separated list of API keys that are allowed to access the API
 API_KEYS=
 
-# Optional base64-encoded PEM Ed25519 public key. When provided, request bodies
-# must be JWTs signed with the corresponding private key.
+# Optional Ed25519 public key (PEM or JWK). Accepts:
+# - Base64-encoded PEM (string)
+# - PEM contents
+# - Absolute path to PEM file
+# - JWK JSON string (public key)
+# When provided, request bodies must carry a signed JWT.
 JWT_PUBLIC_KEY=
 
 # The port and host the API Gateway should listen on
@@ -44,13 +48,22 @@ curl -X POST http://localhost:$PORT/rpc/jamulus/getMode -H "x-api-key: $API_KEY"
 
 ## JWT request mode
 
-If the `JWT_PUBLIC_KEY` environment variable is set (base64-encoded PEM Ed25519 public key, or a path to a PEM file), the gateway requires POST bodies to be JSON Web Tokens (`Content-Type: application/jwt`). The JWT must be signed with the corresponding private key and include:
+If the `JWT_PUBLIC_KEY` environment variable is set, the gateway requires POST bodies to be JSON with a `jwt` field:
+
+```json
+{ "jwt": "<signed token>" }
+```
+
+The JWT must be signed with the corresponding Ed25519 private key and include:
 
 - `method`: the RPC path (for example `jamulus/getMode`)
 - `params`: optional RPC params object
 - `exp`: expiration timestamp (seconds since epoch)
 - `jti`: unique token ID (replay protection)
 - Optional `nbf`: not-before timestamp
+
+Recommendations:
+- Keep `exp` within 3 minutes; the gateway rejects tokens expiring more than 5 minutes in the future to bound replay cache size.
 
 The `X-API-Key` header is still required. Example payload (before signing):
 

@@ -146,6 +146,7 @@ When running tests with Docker Compose from the `tests/` directory:
 - **Commands**: Reference files directly without subdirectory paths (e.g., `node mock-jamulus-server.mjs` not `node tests/mock-jamulus-server.mjs`)
 - **Version field**: The `version` field in docker-compose.yml is obsolete in modern Docker Compose and should be omitted
 - **Pre-built images**: Use pre-built images (e.g., `jamulus-json-rpc-api-gateway:test`) instead of building in docker-compose to avoid context path issues
+- **Health checks**: In Alpine containers, use `127.0.0.1` instead of `localhost` for health checks (e.g., `nc -z 127.0.0.1 22222`) as localhost resolution may not work properly
 
 ## HTTP Client Implementation
 

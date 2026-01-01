@@ -13,7 +13,7 @@ services:
     networks:
       - test-network
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "22222"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "22222"]
       interval: 2s
       timeout: 5s
       retries: 10

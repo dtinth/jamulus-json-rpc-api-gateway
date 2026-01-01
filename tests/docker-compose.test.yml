@@ -34,7 +34,7 @@ services:
       mock-jamulus:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3434/"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3434/"]
       interval: 2s
       timeout: 5s
       retries: 10

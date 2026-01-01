@@ -20,6 +20,8 @@ services:
 
   # API Gateway (the application being tested)
   gateway:
+    build:
+      context: ..
     image: jamulus-json-rpc-api-gateway:test
     environment:
       PORT: 3434
@@ -43,10 +45,10 @@ services:
   # Test Runner
   test-runner:
     image: node:20.10.0-alpine
-    working_dir: /app
-    command: sh -c "corepack enable && pnpm add -g jose && node --test acceptance.test.mjs"
+    working_dir: /workspace/tests
+    command: sh -c "corepack enable && cd /workspace && pnpm install && cd /workspace/tests && node --test acceptance.test.mjs"
     volumes:
-      - .:/app
+      - ..:/workspace
     environment:
       GATEWAY_URL: http://gateway:3434
       API_KEY: test-api-key-123

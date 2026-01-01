@@ -52,7 +52,9 @@ if (env.JWT_PUBLIC_KEY) {
   try {
     jwtVerifier = createJwtVerifier(env.JWT_PUBLIC_KEY);
   } catch (error) {
-    console.error(`Error initializing JWT verifier: ${error.message}`);
+    console.error(
+      `Error initializing JWT verifier (expecting a base64-encoded PEM public key or an absolute path to a PEM file): ${error.message}`
+    );
     process.exit(1);
   }
 }
@@ -228,7 +230,7 @@ function readPublicKey(value) {
       return decoded;
     }
   } catch (error) {
-    // fall through to error below
+    throw new Error(`Invalid JWT_PUBLIC_KEY format: ${error.message}`);
   }
   throw new Error("Invalid JWT_PUBLIC_KEY format");
 }

@@ -53,14 +53,15 @@ function createJwt(method, params = {}, overrides = {}) {
 }
 
 function buildRpcRequest(method, params = {}, options = {}) {
+  const useJsonBody = options.forceJsonBody || !jwtEnabled;
   const headers = {
-    ...(jwtEnabled ? { 'Content-Type': 'application/jwt' } : { 'Content-Type': 'application/json' }),
+    ...(useJsonBody ? { 'Content-Type': 'application/json' } : { 'Content-Type': 'application/jwt' }),
     ...(options.apiKey !== undefined ? { 'X-API-Key': options.apiKey } : options.skipApiKey ? {} : { 'X-API-Key': API_KEY }),
     ...(options.headers || {}),
   };
-  const body = jwtEnabled
-    ? createJwt(method, params, options.jwtOverrides || {})
-    : { params };
+  const body = useJsonBody
+    ? { params }
+    : createJwt(method, params, options.jwtOverrides || {});
   return { headers, body };
 }
 
@@ -192,16 +193,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
 
   if (jwtEnabled) {
     it('rejects plain JSON body when JWT is required', async () => {
-      const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY
-        },
-        body: {
-          params: {}
-        }
-      });
+      const response = await callRpc('jamulus/getMode', {}, { forceJsonBody: true });
 
       assert.equal(response.status, 500);
       assert.ok(response.body);

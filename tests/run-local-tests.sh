@@ -22,6 +22,8 @@ JAMULUS_PORT=22223
 JAMULUS_SECRET="test-secret-1234567890"
 GATEWAY_PORT=3435
 API_KEY="test-api-key-123"
+JWT_PUBLIC_KEY_BASE64="LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQTZFdmh1cnlkYmlSOWZGQThWVEM0RFBGYjMzZk13aWV5dnphZTZyTjNxajQ9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo="
+JWT_PRIVATE_KEY_BASE64="LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUM4MFNBZ05TSlF2MTM2a2tpSjZEL3R0N0ZoZ2RFRndnRHZNcElONWgwT0gKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
 
 echo "Starting mock Jamulus server on port ${JAMULUS_PORT}..."
 JAMULUS_PORT=${JAMULUS_PORT} JAMULUS_SECRET="${JAMULUS_SECRET}" node tests/mock-jamulus-server.mjs &
@@ -38,6 +40,7 @@ PORT=${GATEWAY_PORT} \
   JAMULUS_HOST=127.0.0.1 \
   JAMULUS_PORT=${JAMULUS_PORT} \
   API_KEYS="${API_KEY},another-key" \
+  JWT_PUBLIC_KEY="${JWT_PUBLIC_KEY_BASE64}" \
   node src/server.mjs &
 GATEWAY_PID=$!
 
@@ -65,7 +68,10 @@ echo "Running acceptance tests..."
 echo ""
 
 # Run tests with Node.js built-in test runner
-GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}" API_KEY="${API_KEY}" node --test tests/acceptance.test.mjs
+GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}" \
+  API_KEY="${API_KEY}" \
+  JWT_PRIVATE_KEY_BASE64="${JWT_PRIVATE_KEY_BASE64}" \
+  node --test tests/acceptance.test.mjs
 TEST_RESULT=$?
 
 if [ $TEST_RESULT -eq 0 ]; then

@@ -1,5 +1,5 @@
 import { Env } from "@(-.-)/env";
-import { randomUUID } from "crypto";
+import { createPublicKey, randomUUID, verify } from "crypto";
 import Fastify from "fastify";
 import fs from "fs";
 import ndjson from "ndjson";
@@ -18,6 +18,7 @@ const env = Env(
       .string()
       .min(1)
       .transform((value) => value.split(",")),
+    JWT_PUBLIC_KEY: z.string().optional(),
   })
 );
 
@@ -37,6 +38,24 @@ if (path.isAbsolute(env.JAMULUS_SECRET) && fs.existsSync(env.JAMULUS_SECRET)) {
 }
 
 const fastify = Fastify({ logger: true });
+
+fastify.addContentTypeParser(
+  ["application/jwt", "text/plain"],
+  { parseAs: "string" },
+  (request, body, done) => {
+    done(null, body);
+  }
+);
+
+let jwtVerifier = null;
+if (env.JWT_PUBLIC_KEY) {
+  try {
+    jwtVerifier = createJwtVerifier(env.JWT_PUBLIC_KEY);
+  } catch (error) {
+    console.error(`Error initializing JWT verifier: ${error.message}`);
+    process.exit(1);
+  }
+}
 
 const jamulusClient = createJamulusClient();
 
@@ -97,10 +116,104 @@ fastify.post("/rpc/*", async (request) => {
   if (!env.API_KEYS.includes(apiKey)) {
     throw new Error("Invalid X-API-Key header");
   }
-  return jamulusClient.request(
-    String(request.params["*"]),
-    request.body?.params || {}
-  );
+  const method = String(request.params["*"]);
+  const params = jwtVerifier
+    ? jwtVerifier.verify(request.body, method).params || {}
+    : request.body?.params || {};
+  return jamulusClient.request(method, params);
 });
+
+function createJwtVerifier(publicKeyInput) {
+  const publicKey = createPublicKey(readPublicKey(publicKeyInput));
+  const usedJtis = new Map();
+  return {
+    verify(token, expectedMethod) {
+      if (typeof token !== "string" || token.length === 0) {
+        throw new Error("Expected JWT body");
+      }
+      const segments = token.split(".");
+      if (segments.length !== 3) {
+        throw new Error("Invalid JWT format");
+      }
+      const [headerSegment, payloadSegment, signatureSegment] = segments;
+      const header = parseJwtSegment(headerSegment);
+      if (header.alg !== "EdDSA") {
+        throw new Error("Invalid JWT algorithm");
+      }
+      const signedData = Buffer.from(`${headerSegment}.${payloadSegment}`);
+      const signature = base64UrlDecode(signatureSegment);
+      const verified = verify(null, signedData, publicKey, signature);
+      if (!verified) {
+        throw new Error("Invalid JWT signature");
+      }
+      const payload = parseJwtSegment(payloadSegment);
+      const now = Math.floor(Date.now() / 1000);
+      if (typeof payload.exp !== "number") {
+        throw new Error("JWT payload missing exp");
+      }
+      if (payload.exp <= now) {
+        throw new Error("JWT expired");
+      }
+      if (payload.nbf && payload.nbf > now) {
+        throw new Error("JWT not yet valid");
+      }
+      if (!payload.jti) {
+        throw new Error("JWT payload missing jti");
+      }
+      cleanupReplayCache(usedJtis, now);
+      const replayExpiration = usedJtis.get(payload.jti);
+      if (replayExpiration && replayExpiration > now) {
+        throw new Error("JWT has already been used");
+      }
+      usedJtis.set(payload.jti, payload.exp);
+      if (!payload.method) {
+        throw new Error("JWT payload missing method");
+      }
+      if (payload.method !== expectedMethod) {
+        throw new Error("JWT method mismatch");
+      }
+      if (payload.params && typeof payload.params !== "object") {
+        throw new Error("JWT params must be an object");
+      }
+      return payload;
+    },
+  };
+}
+
+function cleanupReplayCache(cache, now) {
+  for (const [key, expiry] of cache) {
+    if (expiry <= now) {
+      cache.delete(key);
+    }
+  }
+}
+
+function parseJwtSegment(segment) {
+  return JSON.parse(base64UrlDecode(segment).toString("utf8"));
+}
+
+function base64UrlDecode(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4;
+  const padded =
+    padding === 0 ? normalized : normalized.padEnd(normalized.length + (4 - padding), "=");
+  return Buffer.from(padded, "base64");
+}
+
+function readPublicKey(value) {
+  let key = value;
+  if (path.isAbsolute(value) && fs.existsSync(value)) {
+    key = fs.readFileSync(value, "utf8");
+  }
+  const trimmed = key.trim();
+  if (trimmed.includes("BEGIN PUBLIC KEY")) {
+    return trimmed;
+  }
+  try {
+    return Buffer.from(trimmed, "base64").toString("utf8").trim();
+  } catch (error) {
+    throw new Error("Invalid JWT_PUBLIC_KEY format");
+  }
+}
 
 fastify.listen({ port: env.PORT, host: env.LISTEN_HOST });

@@ -11,17 +11,79 @@
 
 import { describe, it, before } from 'node:test';
 import { strict as assert } from 'node:assert';
+import crypto from 'node:crypto';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3434';
 const API_KEY = process.env.API_KEY || 'test-api-key-123';
 const INVALID_API_KEY = 'invalid-api-key-xyz';
+const JWT_PRIVATE_KEY_BASE64 = process.env.JWT_PRIVATE_KEY_BASE64;
+const jwtPrivateKey = JWT_PRIVATE_KEY_BASE64
+  ? crypto.createPrivateKey(Buffer.from(JWT_PRIVATE_KEY_BASE64, 'base64').toString('utf8'))
+  : null;
+const jwtEnabled = Boolean(jwtPrivateKey);
+
+const base64UrlEncode = (buffer) =>
+  buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+function createJwt(method, params = {}, overrides = {}) {
+  if (!jwtPrivateKey) {
+    throw new Error('JWT private key not configured');
+  }
+  const header = { alg: 'EdDSA', typ: 'JWT' };
+  const payload = {
+    method,
+    params,
+    exp: Math.floor(Date.now() / 1000) + 60,
+    jti: crypto.randomUUID(),
+    ...overrides,
+  };
+  const headerSegment = base64UrlEncode(Buffer.from(JSON.stringify(header)));
+  const payloadSegment = base64UrlEncode(Buffer.from(JSON.stringify(payload)));
+  const signature = crypto.sign(
+    null,
+    Buffer.from(`${headerSegment}.${payloadSegment}`),
+    jwtPrivateKey
+  );
+  const signatureSegment = base64UrlEncode(signature);
+  return `${headerSegment}.${payloadSegment}.${signatureSegment}`;
+}
+
+function buildRpcRequest(method, params = {}, options = {}) {
+  const headers = {
+    ...(jwtEnabled ? { 'Content-Type': 'application/jwt' } : { 'Content-Type': 'application/json' }),
+    ...(options.apiKey !== undefined ? { 'X-API-Key': options.apiKey } : options.skipApiKey ? {} : { 'X-API-Key': API_KEY }),
+    ...(options.headers || {}),
+  };
+  const body = jwtEnabled
+    ? createJwt(method, params, options.jwtOverrides || {})
+    : { params };
+  return { headers, body };
+}
+
+function callRpc(method, params = {}, options = {}) {
+  const { headers, body } = buildRpcRequest(method, params, options);
+  return httpRequest(`${GATEWAY_URL}/rpc/${method}`, {
+    method: 'POST',
+    headers,
+    body,
+  });
+}
 
 // Helper function to make HTTP requests
 async function httpRequest(url, options = {}) {
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers: options.headers || {},
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body:
+      typeof options.body === 'string'
+        ? options.body
+        : options.body
+          ? JSON.stringify(options.body)
+          : undefined,
   });
 
   let body;
@@ -71,13 +133,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
   });
 
   it('POST /rpc/jamulus/getMode without API key returns error', async () => {
-    const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: {}
-    });
+    const response = await callRpc('jamulus/getMode', {}, { skipApiKey: true });
     
     assert.equal(response.status, 500);
     assert.ok(response.body);
@@ -86,14 +142,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
   });
 
   it('POST /rpc/jamulus/getMode with invalid API key returns error', async () => {
-    const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': INVALID_API_KEY
-      },
-      body: {}
-    });
+    const response = await callRpc('jamulus/getMode', {}, { apiKey: INVALID_API_KEY });
     
     assert.equal(response.status, 500);
     assert.ok(response.body);
@@ -102,14 +151,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
   });
 
   it('POST /rpc/jamulus/getMode with valid API key returns response', async () => {
-    const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
-      },
-      body: {}
-    });
+    const response = await callRpc('jamulus/getMode');
     
     assert.equal(response.status, 200);
     assert.ok(response.body);
@@ -119,14 +161,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
   });
 
   it('POST /rpc/jamulus/getVersion with valid API key returns response', async () => {
-    const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getVersion`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
-      },
-      body: {}
-    });
+    const response = await callRpc('jamulus/getVersion');
     
     assert.equal(response.status, 200);
     assert.ok(response.body);
@@ -136,16 +171,7 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
   });
 
   it('POST /rpc/jamulusclient/getChannelInfo with params returns response', async () => {
-    const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulusclient/getChannelInfo`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
-      },
-      body: {
-        params: {}
-      }
-    });
+    const response = await callRpc('jamulusclient/getChannelInfo', {});
     
     assert.equal(response.status, 200);
     assert.ok(response.body);
@@ -156,18 +182,44 @@ describe('jamulus-json-rpc-api-gateway acceptance tests', () => {
 
   it('Multiple sequential requests work correctly', async () => {
     for (let i = 0; i < 3; i++) {
-      const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY
-        },
-        body: {}
-      });
+      const response = await callRpc('jamulus/getMode');
       
       assert.equal(response.status, 200);
       assert.ok(response.body);
       assert.equal(response.body.result.mode, 'server');
     }
   });
+
+  if (jwtEnabled) {
+    it('rejects plain JSON body when JWT is required', async () => {
+      const response = await httpRequest(`${GATEWAY_URL}/rpc/jamulus/getMode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY
+        },
+        body: {
+          params: {}
+        }
+      });
+
+      assert.equal(response.status, 500);
+      assert.ok(response.body);
+      assert.ok(response.body.message.includes('Expected JWT body'));
+    });
+
+    it('rejects replayed JWT tokens', async () => {
+      const jwtOverrides = {
+        jti: 'replay-test-token',
+        exp: Math.floor(Date.now() / 1000) + 60,
+      };
+      const first = await callRpc('jamulus/getMode', {}, { jwtOverrides });
+      assert.equal(first.status, 200);
+
+      const second = await callRpc('jamulus/getMode', {}, { jwtOverrides });
+      assert.equal(second.status, 500);
+      assert.ok(second.body);
+      assert.ok(second.body.message.includes('already been used'));
+    });
+  }
 });

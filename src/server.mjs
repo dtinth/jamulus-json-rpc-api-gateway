@@ -40,7 +40,7 @@ if (path.isAbsolute(env.JAMULUS_SECRET) && fs.existsSync(env.JAMULUS_SECRET)) {
 const fastify = Fastify({ logger: true });
 
 fastify.addContentTypeParser(
-  ["application/jwt", "text/plain"],
+  "application/jwt",
   { parseAs: "string" },
   (request, body, done) => {
     done(null, body);
@@ -126,6 +126,7 @@ fastify.post("/rpc/*", async (request) => {
 function createJwtVerifier(publicKeyInput) {
   const publicKey = createPublicKey(readPublicKey(publicKeyInput));
   const usedJtis = new Map();
+  const replayCacheState = { lastCleanup: 0 };
   return {
     verify(token, expectedMethod) {
       if (typeof token !== "string" || token.length === 0) {
@@ -160,7 +161,7 @@ function createJwtVerifier(publicKeyInput) {
       if (!payload.jti) {
         throw new Error("JWT payload missing jti");
       }
-      cleanupReplayCache(usedJtis, now);
+      cleanupReplayCache(usedJtis, now, replayCacheState);
       const replayExpiration = usedJtis.get(payload.jti);
       if (replayExpiration && replayExpiration > now) {
         throw new Error("JWT has already been used");
@@ -172,7 +173,12 @@ function createJwtVerifier(publicKeyInput) {
       if (payload.method !== expectedMethod) {
         throw new Error("JWT method mismatch");
       }
-      if (payload.params && typeof payload.params !== "object") {
+      if (
+        payload.params !== undefined &&
+        (payload.params === null ||
+          typeof payload.params !== "object" ||
+          Array.isArray(payload.params))
+      ) {
         throw new Error("JWT params must be an object");
       }
       return payload;
@@ -180,12 +186,16 @@ function createJwtVerifier(publicKeyInput) {
   };
 }
 
-function cleanupReplayCache(cache, now) {
+function cleanupReplayCache(cache, now, state) {
+  if (now - state.lastCleanup < 60) {
+    return;
+  }
   for (const [key, expiry] of cache) {
     if (expiry <= now) {
       cache.delete(key);
     }
   }
+  state.lastCleanup = now;
 }
 
 function parseJwtSegment(segment) {
@@ -201,19 +211,32 @@ function base64UrlDecode(value) {
 }
 
 function readPublicKey(value) {
-  let key = value;
-  if (path.isAbsolute(value) && fs.existsSync(value)) {
-    key = fs.readFileSync(value, "utf8");
+  const trimmed = value.trim();
+  if (path.isAbsolute(trimmed) && fs.existsSync(trimmed)) {
+    const fileContent = fs.readFileSync(trimmed, "utf8").trim();
+    if (!isPemPublicKey(fileContent)) {
+      throw new Error("JWT_PUBLIC_KEY file must contain a PEM public key");
+    }
+    return fileContent;
   }
-  const trimmed = key.trim();
-  if (trimmed.includes("BEGIN PUBLIC KEY")) {
+  if (isPemPublicKey(trimmed)) {
     return trimmed;
   }
   try {
-    return Buffer.from(trimmed, "base64").toString("utf8").trim();
+    const decoded = Buffer.from(trimmed, "base64").toString("utf8").trim();
+    if (isPemPublicKey(decoded)) {
+      return decoded;
+    }
   } catch (error) {
-    throw new Error("Invalid JWT_PUBLIC_KEY format");
+    // fall through to error below
   }
+  throw new Error("Invalid JWT_PUBLIC_KEY format");
+}
+
+function isPemPublicKey(content) {
+  return /^-----BEGIN PUBLIC KEY-----[\s\S]+-----END PUBLIC KEY-----$/.test(
+    content.trim()
+  );
 }
 
 fastify.listen({ port: env.PORT, host: env.LISTEN_HOST });

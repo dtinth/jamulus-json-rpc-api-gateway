@@ -12,47 +12,41 @@
 import { describe, it, before } from 'node:test';
 import { strict as assert } from 'node:assert';
 import crypto from 'node:crypto';
+import { importPKCS8, SignJWT } from 'jose';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3434';
 const API_KEY = process.env.API_KEY || 'test-api-key-123';
 const INVALID_API_KEY = 'invalid-api-key-xyz';
 const JWT_PRIVATE_KEY_BASE64 = process.env.JWT_PRIVATE_KEY_BASE64;
-const jwtPrivateKey = JWT_PRIVATE_KEY_BASE64
-  ? crypto.createPrivateKey(Buffer.from(JWT_PRIVATE_KEY_BASE64, 'base64').toString('utf8'))
+const jwtPrivateKeyPem = JWT_PRIVATE_KEY_BASE64
+  ? Buffer.from(JWT_PRIVATE_KEY_BASE64, 'base64').toString('utf8')
   : null;
-const jwtEnabled = Boolean(jwtPrivateKey);
+const jwtPrivateKeyPromise = jwtPrivateKeyPem
+  ? importPKCS8(jwtPrivateKeyPem, 'Ed25519')
+  : null;
+const jwtEnabled = Boolean(jwtPrivateKeyPromise);
 
-const base64UrlEncode = (buffer) =>
-  buffer
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-function createJwt(method, params = {}, overrides = {}) {
-  if (!jwtPrivateKey) {
+async function createJwt(method, params = {}, overrides = {}) {
+  if (!jwtPrivateKeyPromise) {
     throw new Error('JWT private key not configured');
   }
-  const header = { alg: 'EdDSA', typ: 'JWT' };
-  const payload = {
+  const key = await jwtPrivateKeyPromise;
+  const exp = overrides.exp ?? Math.floor(Date.now() / 1000) + 60;
+  const jti = overrides.jti ?? crypto.randomUUID();
+  const builder = new SignJWT({
     method,
     params,
-    exp: Math.floor(Date.now() / 1000) + 60,
-    jti: crypto.randomUUID(),
-    ...overrides,
-  };
-  const headerSegment = base64UrlEncode(Buffer.from(JSON.stringify(header)));
-  const payloadSegment = base64UrlEncode(Buffer.from(JSON.stringify(payload)));
-  const signature = crypto.sign(
-    null,
-    Buffer.from(`${headerSegment}.${payloadSegment}`),
-    jwtPrivateKey
-  );
-  const signatureSegment = base64UrlEncode(signature);
-  return `${headerSegment}.${payloadSegment}.${signatureSegment}`;
+    jti,
+  })
+    .setProtectedHeader({ alg: 'EdDSA' })
+    .setExpirationTime(exp);
+  if (overrides.nbf !== undefined) {
+    builder.setNotBefore(overrides.nbf);
+  }
+  return builder.sign(key);
 }
 
-function buildRpcRequest(method, params = {}, options = {}) {
+async function buildRpcRequest(method, params = {}, options = {}) {
   const useJsonBody = options.forceJsonBody || !jwtEnabled;
   const headers = {
     'Content-Type': 'application/json',
@@ -61,12 +55,12 @@ function buildRpcRequest(method, params = {}, options = {}) {
   };
   const body = useJsonBody
     ? { params }
-    : { jwt: createJwt(method, params, options.jwtOverrides || {}) };
+    : { jwt: await createJwt(method, params, options.jwtOverrides || {}) };
   return { headers, body };
 }
 
-function callRpc(method, params = {}, options = {}) {
-  const { headers, body } = buildRpcRequest(method, params, options);
+async function callRpc(method, params = {}, options = {}) {
+  const { headers, body } = await buildRpcRequest(method, params, options);
   return httpRequest(`${GATEWAY_URL}/rpc/${method}`, {
     method: 'POST',
     headers,

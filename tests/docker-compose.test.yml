@@ -44,7 +44,7 @@ services:
   test-runner:
     image: node:20.10.0-alpine
     working_dir: /app
-    command: sh -c "npm install jose && node --test acceptance.test.mjs"
+    command: sh -c "corepack enable && pnpm install && node --test acceptance.test.mjs"
     volumes:
       - .:/app
     environment:
